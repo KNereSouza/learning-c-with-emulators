@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
 
 static const uint8_t chip8_fontset[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -131,6 +133,58 @@ void chip8_cycle(Chip8 *cpu) {
             cpu->V[x] += nn;
             cpu->PC += 2;
             break;
+        case 0x8000:
+            switch (opcode & 0x000F) {
+                case 0x0: {
+                    cpu->V[x] = cpu->V[y];
+                    break;
+                }
+                case 0x1: {
+                    cpu->V[x] |= cpu->V[y];
+                    break;
+                }
+                case 0x2: {
+                    cpu->V[x] &= cpu->V[y];
+                    break;
+                }
+                case 0x3: {
+                    cpu->V[x] ^= cpu->V[y];
+                    break;
+                }
+                case 0x4: {
+                    uint16_t sum = cpu->V[x] + cpu->V[y];
+                    cpu->V[x] = sum & 0xFF;
+                    cpu->V[0xF] = (sum > 0xFF) ? 1 : 0;
+                    break;
+                }
+                case 0x5: {
+                    uint8_t flag = (cpu->V[x] >= cpu->V[y]) ? 1 : 0;
+                    cpu->V[x] = cpu->V[x] - cpu->V[y];
+                    cpu->V[0xF] = flag;
+                    break;
+                }
+                case 0x6: {
+                    uint8_t lsb = cpu->V[x] & 0x1;
+                    cpu->V[x] >>= 1;
+                    cpu->V[0xF] = lsb;
+                    break;
+                }
+                case 0x7: {
+                    uint8_t flag = (cpu->V[y] >= cpu->V[x]) ? 1 : 0;
+                    cpu->V[x] = cpu->V[y] - cpu->V[x];
+                    cpu->V[0xF] = flag;
+                    break;
+                }
+                case 0xE: {
+                    uint8_t msb = (cpu->V[x] >> 7) & 0x1;
+                    cpu->V[x] <<= 1;
+                    cpu->V[0xF] = msb;
+                    break;
+                }
+                default: /* unknown 8-family */ break;
+            }
+            cpu->PC += 2;
+            break;
         case 0x9000:
             if (cpu->V[x] != cpu->V[y]) {
                 cpu->PC += 4;
@@ -140,6 +194,13 @@ void chip8_cycle(Chip8 *cpu) {
             break;
         case 0xA000:
             cpu->I = nnn;
+            cpu->PC += 2;
+            break;
+        case 0xB000:
+            cpu->PC = cpu->V[0] + nnn;
+            break;
+        case 0xC000:
+            cpu->V[x] = rand() & nn;
             cpu->PC += 2;
             break;
         case 0xD000:
@@ -205,11 +266,15 @@ int chip8_load_rom(Chip8 *cpu, const char *path) {
 #define CYCLES_PER_FRAME 8
 #define FRAME_DELAY_US   16666
 
-int main(void) {
+int main(int argc, char **argv) {
+    srand(time(NULL));
+
+    const char *rom_path = (argc > 1) ? argv[1] : "roms/IBM Logo.ch8";
+
     Chip8 cpu;
     chip8_init(&cpu);
 
-    if (chip8_load_rom(&cpu, "roms/IBM Logo.ch8") != 0) {
+    if (chip8_load_rom(&cpu, rom_path) != 0) {
         return 1;
     }
 
